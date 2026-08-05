@@ -54,11 +54,22 @@ export class TeamsService {
     const team = await this.teamModel.findById(teamId).exec();
     if (!team) throw new NotFoundException(`Team #${teamId} not found`);
 
-    const alreadyMember = team.members.some((m) => m.user.toString() === addMemberDto.userId);
+    let targetUserId = addMemberDto.userId.trim();
+    if (targetUserId.includes('@')) {
+      const user = await this.teamModel.db
+        .collection('users')
+        .findOne({ email: targetUserId.toLowerCase() });
+      if (!user) {
+        throw new NotFoundException(`User with email "${targetUserId}" not found`);
+      }
+      targetUserId = user._id.toString();
+    }
+
+    const alreadyMember = team.members.some((m) => m.user.toString() === targetUserId);
     if (alreadyMember) throw new ConflictException('User is already a member of this team');
 
     team.members.push({
-      user: new Types.ObjectId(addMemberDto.userId) as any,
+      user: new Types.ObjectId(targetUserId) as any,
       role: addMemberDto.role ?? TeamRole.MEMBER,
       joinedAt: new Date(),
       isAvailable: true,

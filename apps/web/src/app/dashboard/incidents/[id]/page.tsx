@@ -1,18 +1,23 @@
 'use client';
 
 import { useParams, useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
+import { useQuery } from '@tanstack/react-query';
 import { formatDistanceToNow } from 'date-fns';
 import {
   AlertCircle,
   ArrowLeft,
   CheckCircle2,
   Clock,
+  Download,
   FileText,
   Loader2,
   MessageSquare,
+  Paperclip,
   Send,
+  Upload,
+  UserCheck,
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -28,7 +33,10 @@ import {
   useIncidentQuery,
   useIncidentTimelineQuery,
   useUpdateIncidentMutation,
+  useUploadAttachmentMutation,
 } from '@/hooks/use-incidents';
+import { adminApi } from '@/lib/api/admin';
+import { API_URL } from '@/lib/constants';
 import { useAuth } from '@/providers/auth-provider';
 
 export default function IncidentDetailPage() {
@@ -37,13 +45,25 @@ export default function IncidentDetailPage() {
   const { user } = useAuth();
   const id = params.id as string;
   const [commentContent, setCommentContent] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: incident, isLoading } = useIncidentQuery(id);
   const { data: timeline } = useIncidentTimelineQuery(id);
   const { data: comments } = useIncidentCommentsQuery(id);
+  const { data: usersData } = useQuery({
+    queryKey: ['admin-users-list'],
+    queryFn: () => adminApi.getUsers(1, 100),
+  });
 
   const updateMutation = useUpdateIncidentMutation(id);
   const addCommentMutation = useAddCommentMutation(id);
+  const uploadAttachmentMutation = useUploadAttachmentMutation(id);
+
+  const usersList = Array.isArray(usersData?.data)
+    ? usersData.data
+    : Array.isArray(usersData)
+      ? usersData
+      : [];
 
   if (isLoading || !incident) {
     return (
@@ -68,6 +88,27 @@ export default function IncidentDetailPage() {
       toast.success('Incident resolved');
     } catch (e) {
       toast.error('Failed to resolve incident');
+    }
+  };
+
+  const handleAssigneeChange = async (userId: string) => {
+    try {
+      await updateMutation.mutateAsync({ assignee: (userId || null) as any });
+      toast.success(userId ? 'Assignee updated' : 'Incident unassigned');
+    } catch {
+      toast.error('Failed to update assignee');
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFile = e.target.files?.[0];
+    if (!selectedFile) return;
+    try {
+      await uploadAttachmentMutation.mutateAsync(selectedFile);
+      toast.success(`Attached ${selectedFile.name}`);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    } catch {
+      toast.error('Failed to upload file');
     }
   };
 
@@ -231,9 +272,25 @@ export default function IncidentDetailPage() {
                 <span className="text-muted-foreground">Created</span>
                 <span className="font-medium">{new Date(incident.createdAt).toLocaleString()}</span>
               </div>
-              <div className="grid grid-cols-2 gap-1 border-b pb-3">
+              <div className="grid grid-cols-2 gap-1 border-b pb-3 items-center">
                 <span className="text-muted-foreground">Assignee</span>
-                <span className="font-medium">{incident.assignee?.name || 'Unassigned'}</span>
+                <select
+                  value={
+                    typeof incident.assignee === 'object'
+                      ? ((incident.assignee as any)?._id ?? '')
+                      : (incident.assignee ?? '')
+                  }
+                  onChange={(e) => handleAssigneeChange(e.target.value)}
+                  disabled={updateMutation.isPending}
+                  className="flex h-8 w-full rounded-md border border-input bg-background px-2 py-1 text-xs shadow-sm focus:outline-none focus:ring-1 focus:ring-ring"
+                >
+                  <option value="">Unassigned</option>
+                  {usersList.map((u: any) => (
+                    <option key={u._id} value={u._id}>
+                      {u.name} ({u.role})
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="grid grid-cols-2 gap-1 border-b pb-3">
                 <span className="text-muted-foreground">Service</span>
@@ -257,13 +314,59 @@ export default function IncidentDetailPage() {
           <Card>
             <CardHeader>
               <CardTitle className="text-lg flex items-center">
-                <FileText className="mr-2 h-4 w-4" />
-                Attachments
+                <Paperclip className="mr-2 h-4 w-4" />
+                Attachments ({incident.attachments?.length ?? 0})
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground">No attachments yet.</p>
-              <Button variant="outline" className="w-full mt-4" size="sm">
+            <CardContent className="space-y-3">
+              {incident.attachments?.length > 0 ? (
+                <div className="space-y-2">
+                  {incident.attachments.map((att: any) => (
+                    <div
+                      key={att._id ?? att.filename}
+                      className="flex items-center justify-between p-2 rounded-md border bg-muted/20 text-xs"
+                    >
+                      <div className="flex items-center gap-2 truncate">
+                        <FileText className="h-4 w-4 text-primary shrink-0" />
+                        <span className="font-medium truncate">{att.originalName}</span>
+                        <span className="text-muted-foreground shrink-0">
+                          ({(att.size / 1024).toFixed(1)} KB)
+                        </span>
+                      </div>
+                      <a
+                        href={`${API_URL}${att.url}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-primary hover:underline flex items-center gap-1 shrink-0 ml-2"
+                      >
+                        <Download className="h-3 w-3" />
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">No attachments yet.</p>
+              )}
+
+              <input
+                type="file"
+                ref={fileInputRef}
+                className="hidden"
+                onChange={handleFileUpload}
+              />
+
+              <Button
+                variant="outline"
+                className="w-full mt-2"
+                size="sm"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadAttachmentMutation.isPending}
+              >
+                {uploadAttachmentMutation.isPending ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Upload className="mr-2 h-4 w-4" />
+                )}
                 Upload File
               </Button>
             </CardContent>

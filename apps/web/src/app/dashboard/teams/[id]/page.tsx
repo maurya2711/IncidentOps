@@ -339,15 +339,15 @@ export default function TeamDetailPage() {
           </DialogHeader>
           <form onSubmit={handleAddMember} className="space-y-4 mt-2">
             <div className="space-y-2">
-              <Label>User ID</Label>
+              <Label>User Email or User ID</Label>
               <Input
-                placeholder="Paste MongoDB user _id"
+                placeholder="Enter user email (e.g. user@example.com) or User ID"
                 value={inviteUserId}
                 onChange={(e) => setInviteUserId(e.target.value)}
                 required
               />
               <p className="text-xs text-muted-foreground">
-                You can find user IDs in the Users management section.
+                You can enter the member's email address or their User ID.
               </p>
             </div>
             <div className="space-y-2">
