@@ -1,9 +1,14 @@
 export const APP_NAME = 'IncidentOps';
 export const APP_DESCRIPTION = 'Enterprise Incident Management Platform';
 
-export const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
-export const WS_URL = process.env.NEXT_PUBLIC_WS_URL ?? 'http://localhost:4000';
-export const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
+const rawApiUrl = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:4000';
+export const API_URL = rawApiUrl.replace(/\/+$/, '');
+
+const rawWsUrl = process.env.NEXT_PUBLIC_WS_URL ?? 'http://localhost:4000';
+export const WS_URL = rawWsUrl.replace(/\/+$/, '');
+
+const rawAppUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000';
+export const APP_URL = rawAppUrl.replace(/\/+$/, '');
 
 export const ROUTES = {
   HOME: '/',
