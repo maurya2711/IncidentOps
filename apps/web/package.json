@@ -4,6 +4,7 @@
   "private": true,
   "description": "IncidentOps Next.js Frontend",
   "scripts": {
+    "prebuild": "pnpm --filter @incidentops/shared build",
     "dev": "next dev --port 3000",
     "build": "next build",
     "start": "next start --port 3000",

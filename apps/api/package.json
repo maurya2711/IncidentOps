@@ -4,6 +4,7 @@
   "private": true,
   "description": "IncidentOps NestJS API",
   "scripts": {
+    "prebuild": "pnpm --filter @incidentops/shared build",
     "build": "nest build",
     "dev": "nest start --watch",
     "start": "node dist/main",

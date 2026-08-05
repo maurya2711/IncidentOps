@@ -1,0 +1,478 @@
+# IncidentOps — Master Implementation Plan (All 11 Phases)
+
+## Product Overview
+
+**IncidentOps** is a production-grade enterprise Incident Management SaaS platform inspired by PagerDuty, Opsgenie, Better Stack, Datadog, and Linear. It is a full-stack monorepo with a Next.js 15 frontend and NestJS backend, deployed on Vercel + Railway + MongoDB Atlas.
+
+---
+
+## Architecture Summary
+
+```
+incidentops/                        ← Turborepo monorepo root
+├── apps/
+│   ├── web/                        ← Next.js 15 (App Router, React 19)
+│   └── api/                        ← NestJS 10 (REST + WebSocket)
+├── packages/
+│   └── shared/                     ← Shared TypeScript types & enums
+├── docker-compose.yml              ← Local dev environment
+├── turbo.json
+└── .github/                        ← CI/CD skeleton
+```
+
+### Frontend Stack
+| Tool | Purpose |
+|---|---|
+| Next.js 15 + App Router | Routing, SSR, Server Components |
+| React 19 | UI rendering |
+| TypeScript (strict) | Type safety |
+| Tailwind CSS v3 | Utility-first styling |
+| shadcn/ui | Accessible component primitives |
+| TanStack Query v5 | Server state, caching, mutations |
+| Zustand | Client-side global state |
+| React Hook Form + Zod | Forms and validation |
+| Framer Motion | Animations and transitions |
+| Recharts | Data visualization |
+| Lucide Icons | Icon system |
+| Socket.IO Client | Real-time communication |
+| next-themes | Dark/light theme |
+
+### Backend Stack
+| Tool | Purpose |
+|---|---|
+| NestJS 10 | Framework, DI, modular architecture |
+| MongoDB + Mongoose | Primary database |
+| JWT + Refresh Tokens | Authentication |
+| BullMQ | Background job queue |
+| Redis | Queue, caching, sessions |
+| Socket.IO | Real-time WebSocket |
+| Multer | File/attachment uploads |
+| Nodemailer | Email notifications |
+| class-validator + class-transformer | DTO validation |
+| Swagger/OpenAPI | API documentation |
+| Docker | Containerization |
+
+---
+
+## Design System
+
+### Color Tokens (Dark Theme)
+```
+Background:     #0a0a0a  (primary surface)
+Surface:        #111111  (cards, panels)
+Surface Raised: #1a1a1a  (elevated elements)
+Border:         #1f1f1f  (subtle dividers)
+Border Muted:   #2a2a2a  (stronger borders)
+Foreground:     #fafafa  (primary text)
+Muted:          #737373  (secondary text)
+Accent:         #6366f1  (indigo — brand color)
+Accent Hover:   #5558e3
+Critical:       #ef4444  (P1 — critical)
+High:           #f97316  (P2 — high)
+Medium:         #eab308  (P3 — medium)
+Low:            #22c55e  (P4 — low)
+Info:           #3b82f6  (informational)
+```
+
+### Typography
+- Font: **Inter** (Google Fonts)
+- Heading sizes: 36/30/24/20/18/16/14px
+- Body: 14px/16px
+- Code: JetBrains Mono
+
+### Spacing Grid
+- 8px base grid (4/8/12/16/24/32/48/64px)
+
+### Component Radius
+- Cards: 16px
+- Buttons: 8px
+- Inputs: 8px
+- Badges: 6px
+
+---
+
+## All 11 Phases — Detailed Breakdown
+
+---
+
+### Phase 1 — Project Architecture Setup
+
+**Goal**: Production-ready monorepo scaffold. Zero UI pages.
+
+**Frontend (`apps/web/`)**
+- `package.json` — all deps pinned
+- `next.config.ts` — image domains, rewrites, security headers
+- `tsconfig.json` — strict mode
+- `tailwind.config.ts` — full design system tokens
+- `postcss.config.mjs`
+- `components.json` — shadcn/ui config (slate theme, dark)
+- `.env.example`
+- `src/app/layout.tsx` — root layout, fonts, providers
+- `src/app/globals.css` — CSS variables, base resets
+- `src/lib/api.ts` — Axios instance with interceptors
+- `src/lib/utils.ts` — cn(), formatters
+- `src/lib/constants.ts` — app constants
+- `src/types/index.ts` — global types
+- `src/providers/` — QueryClient, Theme, Auth
+- `src/store/` — Zustand auth + UI stores
+- `src/hooks/` — useDebounce, useLocalStorage, useMediaQuery
+- `.eslintrc.json`, `.prettierrc`, `.editorconfig`
+
+**Backend (`apps/api/`)**
+- `package.json` — all NestJS deps
+- `tsconfig.json`, `nest-cli.json`
+- `src/main.ts` — CORS, validation pipe, Swagger, helmet
+- `src/app.module.ts` — root module
+- `src/config/` — app, database, jwt, redis configs (Joi validation)
+- `src/common/` — guards, decorators, filters, interceptors, pipes
+- `src/modules/` — feature module shells (empty)
+- `src/shared/` — database, redis, queue modules
+- `Dockerfile` — multi-stage production build
+- `.env.example`
+
+**Shared (`packages/shared/`)**
+- `src/types/` — shared interfaces
+- `src/enums/` — IncidentStatus, Severity, Role, ServiceStatus
+- `src/constants/` — pagination defaults, time constants
+
+**Infrastructure**
+- `docker-compose.yml` — MongoDB, Redis, API, Web
+- `turbo.json` — Turborepo pipeline
+- `.husky/` — pre-commit lint + type-check
+- `lint-staged.config.js`
+- `.github/workflows/ci.yml` — lint, build, type-check
+
+---
+
+### Phase 2 — Authentication Module
+
+**Goal**: Complete auth system, JWT + Refresh Tokens, RBAC.
+
+**Backend**
+- `AuthModule` — login, register, refresh, logout, forgot-password, reset-password
+- `UsersModule` — user CRUD, profile
+- JWT strategy (access: 15min, refresh: 7d stored in httpOnly cookie)
+- `JwtAuthGuard`, `RolesGuard`, `@Roles()` decorator
+- Password hashing with bcrypt (12 rounds)
+- Email verification token
+- Password reset token (TTL: 1h)
+- Rate limiting on auth endpoints
+- DTOs: `LoginDto`, `RegisterDto`, `ForgotPasswordDto`, `ResetPasswordDto`
+- User schema: name, email, password, role, avatar, isVerified, lastLogin, sessions[]
+
+**Frontend**
+- Route group: `app/(auth)/` — no sidebar layout
+- Pages: `/login`, `/register`, `/forgot-password`, `/reset-password`
+- `AuthProvider` — manages access token in memory, refresh via cookie
+- `useAuth()` hook
+- Middleware (`middleware.ts`) — protects `/dashboard/**`, redirects unauth
+- Zustand `authStore` — user, isAuthenticated, loading
+- React Hook Form + Zod schemas for all 4 forms
+- "Remember Me" — extends refresh token lifetime
+- Password strength indicator on register
+- Smooth Framer Motion page transitions
+- Beautiful split-screen layout (brand left, form right)
+
+---
+
+### Phase 3 — Dashboard Module
+
+**Goal**: Main application shell + dashboard overview page.
+
+**Layout (Persistent Shell)**
+- `DashboardLayout` — sidebar + header wrapper
+- `AppSidebar` — collapsible, icon + label nav, active states
+  - Navigation: Dashboard, Incidents, Services, Teams, Analytics, On-Call, Notifications, Settings
+  - Bottom: Help, Profile avatar
+- `AppHeader` — breadcrumb, global search (⌘K modal), notifications bell, user menu
+
+**Dashboard Page (`/dashboard`)**
+- `SummaryCards` — Total Incidents, Active, MTTR, Uptime % (with trend arrows)
+- `ServiceHealthGrid` — responsive grid of service status badges
+- `ActiveIncidentsList` — live table with severity, status, assignee, age
+- `RecentActivityTimeline` — vertical timeline with icons per event type
+- `IncidentTrendChart` — area chart (Recharts), 30-day view
+- `TopFailedServices` — horizontal bar chart
+- `QuickActions` — Create Incident, Acknowledge All, Run Diagnostic
+- `RecentNotificationsPanel` — last 5 alerts
+
+**All components**: loading skeletons, empty states, error boundaries, TanStack Query hooks, dummy data layer for Phase 3 (replaced by real API in Phase 8).
+
+---
+
+### Phase 4 — Incidents Module
+
+**Goal**: Full CRUD incident management with rich detail view.
+
+**Backend**
+- `IncidentsModule` with full CRUD
+- Schemas: `Incident`, `Comment`, `Attachment`, `TimelineEvent`
+- Incident fields: title, description, severity (P1–P4), status (open/acknowledged/investigating/resolved/closed), assignee, service, tags, createdAt, updatedAt, resolvedAt, timeline[], comments[], attachments[]
+- DTOs: `CreateIncidentDto`, `UpdateIncidentDto`, `AddCommentDto`
+- Filtering: severity, status, service, dateRange, assignee
+- Sorting: createdAt, severity, updatedAt
+- Pagination: cursor-based
+- File upload (Multer) for attachments
+- Auto-generate timeline events on state change
+- `IncidentsGateway` — Socket.IO events for real-time updates
+
+**Frontend**
+- `/dashboard/incidents` — Incident List (table + kanban toggle)
+  - Advanced filter bar (multi-select: severity, status, service, date)
+  - Global search within incidents
+  - Sort controls
+  - Pagination / infinite scroll
+  - Bulk actions (acknowledge, close)
+- `/dashboard/incidents/new` — Create Incident drawer/modal
+- `/dashboard/incidents/[id]` — Incident Detail page
+  - Header: severity badge, status badge, quick-action buttons (Acknowledge, Resolve, Escalate)
+  - Metadata sidebar: assignee, service, tags, created/updated timestamps
+  - Timeline tab — vertical event timeline, auto-updating
+  - Comments tab — threaded comments, markdown support
+  - Attachments tab — file list, upload dropzone
+  - Related Incidents section
+- Edit Incident — inline editing with optimistic updates
+- Delete with confirmation dialog
+- Assign to user — searchable user picker
+
+---
+
+### Phase 5 — Services Module
+
+**Goal**: Service registry with health monitoring.
+
+**Backend**
+- `ServicesModule` — CRUD for services
+- Schema: name, description, owner (team), status (operational/degraded/partial/outage/maintenance), uptime%, latency (ms), errorRate (%), dependencies[], statusBadgeToken
+- `ServiceMetrics` — time-series data points (stored in MongoDB, queried with aggregation)
+- API: list services, get service, update service, get service metrics, get service incidents
+
+**Frontend**
+- `/dashboard/services` — Service List
+  - Status filter tabs (All / Operational / Degraded / Outage)
+  - Responsive card grid — each card shows: name, status badge, uptime %, latency, error rate, team owner
+- `/dashboard/services/[id]` — Service Detail
+  - Header: service name, status badge, quick-edit
+  - Health metrics bar: uptime %, avg latency, error rate, p95 latency
+  - Latency chart (line chart, 7d/30d toggle)
+  - Error Rate chart
+  - Incident History table (filtered to this service)
+  - Dependencies graph (simple dependency list with status)
+  - Status Badge embed code (copy-to-clipboard)
+- Create / Edit Service — form drawer
+
+---
+
+### Phase 6 — Teams Module
+
+**Goal**: Team management with roles, permissions, on-call availability.
+
+**Backend**
+- `TeamsModule` — team CRUD
+- Schema: name, description, members[], oncallRotation, slackChannel, pagerdutyKey
+- Member schema: userId, role (owner/admin/member/viewer), joinedAt, availability
+- Invite flow: email invite → token → accept → join team
+- `PermissionsGuard` — team-scoped RBAC
+
+**Frontend**
+- `/dashboard/teams` — Team List (card grid)
+- `/dashboard/teams/[id]` — Team Detail
+  - Members table: avatar, name, email, role badge, availability status, current incident
+  - Invite User — email input + role picker → sends invite email
+  - Edit member role — dropdown inline
+  - Deactivate User — confirmation dialog
+  - Permissions matrix — what each role can do (read-only view)
+  - Current Active Incidents — list of incidents assigned to this team
+
+---
+
+### Phase 7 — Analytics Module
+
+**Goal**: Rich data insights dashboard with interactive charts.
+
+**Backend**
+- `AnalyticsModule` — aggregation endpoints
+- Endpoints: incident trend, MTTR, MTTD, service downtime, top failing services, incidents by category, SLA compliance
+- All endpoints support date range filter (7d/30d/90d/custom)
+
+**Frontend**
+- `/dashboard/analytics` — full analytics page
+  - Date range picker (preset + custom)
+  - **Incident Trend** — area chart, incidents created vs resolved over time
+  - **MTTR** (Mean Time to Resolve) — KPI card + trend line chart
+  - **MTTD** (Mean Time to Detect) — KPI card + trend line chart
+  - **Service Downtime** — horizontal bar chart, top 10 services
+  - **Top Failed Services** — ranked list with mini-bars
+  - **Incidents by Category** — donut chart
+  - **SLA Compliance** — gauge / progress bars by severity
+  - All charts: hover tooltips, animated entry, legend, responsive
+  - Export data — CSV download
+
+---
+
+### Phase 8 — Real-Time Module (Socket.IO)
+
+**Goal**: Live updates across the entire application.
+
+**Backend**
+- `EventsGateway` — Socket.IO with JWT auth handshake
+- Namespaces: `/incidents`, `/services`, `/notifications`
+- Events emitted:
+  - `incident:created`, `incident:updated`, `incident:status_changed`, `incident:comment_added`
+  - `service:health_changed`
+  - `notification:new`
+  - `dashboard:metrics_updated`
+- Redis adapter for Socket.IO (horizontal scaling)
+- Room-based broadcasting (org-scoped)
+
+**Frontend**
+- `useSocket()` hook — singleton connection, auto-reconnect, JWT auth
+- `useIncidentSocket()` — auto-invalidate TanStack Query on incident events
+- `useServiceSocket()` — live service health updates
+- `useDashboardSocket()` — live KPI card updates
+- Toast notifications on new critical incidents
+- Live timeline entries append without page refresh
+- Service health grid live badge updates
+
+---
+
+### Phase 9 — Notifications Module
+
+**Goal**: Multi-channel notification system.
+
+**Backend**
+- `NotificationsModule`
+- Schema: userId, type (incident_created/assigned/commented/resolved/service_down), title, body, link, read, createdAt
+- Email via Nodemailer (SMTP/SendGrid)
+- BullMQ queue for async email dispatch
+- User preferences: which events trigger email vs in-app
+- Mark read (single + bulk)
+- Pagination
+
+**Frontend**
+- `NotificationBell` — badge with unread count, animated on new notification
+- `NotificationDrawer` — slide-in panel from header
+  - Notification list with icon by type, timestamp, read/unread state
+  - "Mark all as read" button
+  - Infinite scroll
+  - Click → navigate to relevant resource
+- Toast system (Sonner) — critical incident toasts, success/error feedback
+- Unread count in browser tab title
+
+---
+
+### Phase 10 — Settings Module
+
+**Goal**: Comprehensive user and organization settings.
+
+**Backend**
+- `SettingsModule` — user preferences CRUD
+- `SessionsModule` — list and revoke active refresh token sessions
+- `ApiKeysModule` — generate, list, revoke API keys (SHA-256 hashed)
+- Update profile (name, avatar upload via Multer)
+- Change password (current + new + confirm)
+- Security log (login events)
+
+**Frontend**
+- `/dashboard/settings` — settings shell with tab sidebar
+- **Profile Tab** — avatar upload, name, email, timezone, bio
+- **Password Tab** — change password form, password strength meter
+- **Theme Tab** — Light / Dark / System toggle with live preview
+- **Notifications Tab** — per-event toggles (Email / In-App) with category groups
+- **Security Tab** — 2FA placeholder, login activity log, trusted devices
+- **Sessions Tab** — table of active sessions (device, IP, location, last seen), revoke individual or all
+- **API Keys Tab** — generate named API key, list keys (masked), copy on creation, revoke
+
+---
+
+### Phase 11 — Public Status Page
+
+**Goal**: Publicly accessible status page (no auth required), SEO optimized.
+
+**Backend**
+- `StatusPageModule` — public endpoints (no auth guard)
+- Endpoints: GET `/status` (overall), GET `/status/services`, GET `/status/incidents`, GET `/status/uptime`
+- Maintenance window schema: title, startAt, endAt, affectedServices[]
+
+**Frontend**
+- Route: `app/(public)/status/` — separate layout, no sidebar/auth
+- `StatusPage` — `status.incidentops.io` or `/status` path
+  - **Overall Status Banner** — "All Systems Operational" / "Partial Outage" etc.
+  - **Service Health Grid** — current status per service, colored status pill
+  - **90-Day Uptime Bars** — GitHub contribution-style colored day bars
+  - **Active Incidents** — public incident title + severity + timeline (internal details hidden)
+  - **Maintenance Windows** — upcoming + past scheduled maintenance
+  - **Incident History** — last 30 days of resolved incidents
+  - Auto-refresh every 60 seconds
+  - RSS feed link
+  - Subscribe to updates (email input)
+- **SEO**: `<title>`, `<meta description>`, Open Graph tags, `robots.txt`, `sitemap.xml`, structured data (JSON-LD)
+- Responsive: mobile-first, works on all devices
+- No auth, no sidebar — completely standalone page
+
+---
+
+## Shared Across All Phases
+
+### Error Handling
+- Global NestJS exception filter → consistent error response shape
+- Frontend: `ErrorBoundary` components, TanStack Query error states
+- Axios interceptors for 401 refresh, 403 redirect, 500 toast
+
+### Loading States
+- Per-component skeleton loaders (shimmer effect)
+- Suspense boundaries in App Router
+- Button loading spinners on form submit
+
+### Empty States
+- Illustrated empty state components per feature (incidents, services, teams, notifications)
+
+### Accessibility
+- All interactive elements keyboard navigable
+- ARIA labels on icons and buttons
+- Focus ring styles
+- Color contrast ≥ 4.5:1 (WCAG AA)
+
+### Testing (Skeleton — not blocking phases)
+- Jest + Testing Library (frontend)
+- Jest + Supertest (backend)
+
+---
+
+## Execution Order
+
+| Phase | What Gets Built | Depends On |
+|---|---|---|
+| 1 | Monorepo scaffold, configs, tooling | — |
+| 2 | Auth (backend + frontend) | Phase 1 |
+| 3 | Dashboard shell + overview page | Phase 2 |
+| 4 | Incidents CRUD | Phase 3 |
+| 5 | Services module | Phase 4 |
+| 6 | Teams module | Phase 4 |
+| 7 | Analytics dashboard | Phase 4, 5 |
+| 8 | Socket.IO real-time | Phase 4, 5 |
+| 9 | Notifications system | Phase 8 |
+| 10 | Settings page | Phase 2 |
+| 11 | Public status page | Phase 5 |
+
+---
+
+## Deployment Architecture
+
+```
+Vercel (web)  ←→  Railway (api)  ←→  MongoDB Atlas
+                      ↕
+                Redis Cloud (BullMQ + Socket.IO adapter)
+```
+
+- All secrets via environment variables (never committed)
+- HTTPS everywhere
+- API behind Railway private networking
+- Rate limiting on all public endpoints
+- CORS restricted to Vercel domain
+
+---
+
+> **Starting now with Phase 1 execution.**
+
+
