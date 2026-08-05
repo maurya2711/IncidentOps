@@ -1,11 +1,15 @@
 'use client';
 
-import { createContext, useContext, useEffect, useCallback, type ReactNode } from 'react';
+import { type ReactNode, createContext, useCallback, useContext, useEffect, useRef } from 'react';
+
 import { useMutation } from '@tanstack/react-query';
-import { useAuthStore } from '@/store/auth-store';
-import { setAccessToken, getAccessToken } from '@/lib/api';
-import { authApi } from '@/lib/api/auth';
+import axios from 'axios';
 import { toast } from 'sonner';
+
+import { getAccessToken, setAccessToken } from '@/lib/api';
+import { authApi } from '@/lib/api/auth';
+import { API_URL } from '@/lib/constants';
+import { useAuthStore } from '@/store/auth-store';
 
 interface AuthContextValue {
   isAuthenticated: boolean;
@@ -26,37 +30,89 @@ const AuthContext = createContext<AuthContextValue>({
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const { user, isAuthenticated, isLoading, setUser, setLoading, logout: logoutStore } = useAuthStore();
+  const {
+    user,
+    isAuthenticated,
+    isLoading,
+    setUser,
+    setLoading,
+    logout: logoutStore,
+  } = useAuthStore();
+  const initDone = useRef(false);
 
-  // Initialize auth on mount
+  // On mount: if we believe the user was authenticated (via persisted store),
+  // proactively call /auth/refresh with the httpOnly cookie to get a fresh
+  // access token, then fetch user profile. This avoids the interceptor
+  // retry chain and gives us a deterministic loading state.
   useEffect(() => {
-    const token = getAccessToken();
-    if (token) {
-      refreshUser();
-    } else {
-      setLoading(false);
-    }
-  }, []);
+    if (initDone.current) return;
+    initDone.current = true;
 
-  const refreshUser = useCallback(async () => {
+    const storedIsAuth = useAuthStore.getState().isAuthenticated;
+    const inMemoryToken = getAccessToken();
+
+    if (!storedIsAuth && !inMemoryToken) {
+      // Definitely not authenticated — stop loading immediately
+      setLoading(false);
+      return;
+    }
+
+    // We might have a valid session — try to hydrate
+    setLoading(true);
+    bootstrapSession();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /**
+   * 1) Try to get a fresh access token via the refresh cookie.
+   * 2) Then fetch /auth/me with the new token.
+   * If either step fails, clear auth state.
+   */
+  const bootstrapSession = async () => {
     try {
-      const { data } = await authApi.getMe();
-      setUser(data.data.user);
-      setAccessToken(getAccessToken());
-    } catch (error) {
-      console.error('Failed to refresh user:', error);
+      // Step 1: refresh token → new access token
+      const refreshRes = await axios.post(
+        `${API_URL}/api/auth/refresh`,
+        {},
+        { withCredentials: true },
+      );
+      const body = refreshRes.data?.data;
+      const newToken = (body?.accessToken ?? body?.data?.accessToken) as string | undefined;
+
+      if (!newToken) throw new Error('No access token returned from refresh');
+      setAccessToken(newToken);
+
+      // Step 2: get user profile with the fresh token
+      const meRes = await axios.get(`${API_URL}/api/auth/me`, {
+        withCredentials: true,
+        headers: { Authorization: `Bearer ${newToken}` },
+      });
+      const meBody = meRes.data?.data;
+      const fetchedUser = meBody?.user ?? meBody;
+
+      if (!fetchedUser?._id) throw new Error('Could not parse user from /auth/me');
+      setUser(fetchedUser);
+    } catch (err) {
+      console.warn('[AuthProvider] Session bootstrap failed:', err);
       logoutStore();
       setAccessToken(null);
+      // Clear the stale httpOnly cookie silently
+      await axios.post(`${API_URL}/api/auth/logout`, {}, { withCredentials: true }).catch(() => {});
     } finally {
       setLoading(false);
     }
-  }, [setUser, setLoading, logoutStore]);
+  };
+
+  const refreshUser = useCallback(async () => {
+    await bootstrapSession();
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const loginMutation = useMutation({
     mutationFn: authApi.login,
     onSuccess: (data) => {
-      setAccessToken(data.data.auth.accessToken);
-      setUser(data.data.auth.user);
+      // Shape: axios.data → response body → { data: { accessToken, user } }
+      const payload = data?.data?.data ?? data?.data;
+      setAccessToken(payload?.accessToken);
+      setUser(payload?.user);
       toast.success('Welcome back!');
     },
     onError: (error: any) => {
@@ -71,17 +127,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAccessToken(null);
       toast.success('Logged out successfully');
     },
-    onError: (error: any) => {
-      toast.error(error.response?.data?.message || 'Logout failed');
+    onError: () => {
       // Force logout even on error
       logoutStore();
       setAccessToken(null);
     },
   });
 
-  const login = useCallback(async (data: { email: string; password: string; rememberMe?: boolean }) => {
-    await loginMutation.mutateAsync(data);
-  }, [loginMutation]);
+  const login = useCallback(
+    async (data: { email: string; password: string; rememberMe?: boolean }) => {
+      await loginMutation.mutateAsync(data);
+    },
+    [loginMutation],
+  );
 
   const logout = useCallback(async () => {
     await logoutMutation.mutateAsync();

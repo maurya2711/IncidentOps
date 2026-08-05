@@ -6,11 +6,19 @@ export function middleware(request: NextRequest) {
   const refreshToken = request.cookies.get('refreshToken')?.value;
 
   // Public routes that don't require authentication
-  const publicRoutes = ['/', '/login', '/register', '/forgot-password', '/reset-password'];
-  
+  const publicRoutes = [
+    '/',
+    '/login',
+    '/register',
+    '/forgot-password',
+    '/reset-password',
+    '/verify-email',
+    '/resend-verification',
+  ];
+
   // Check if the current path is public
-  const isPublicRoute = publicRoutes.some(route => 
-    pathname === route || pathname.startsWith(route)
+  const isPublicRoute = publicRoutes.some(
+    (route) => pathname === route || pathname.startsWith(route),
   );
 
   // Redirect to login if trying to access protected route without refresh token
@@ -21,7 +29,11 @@ export function middleware(request: NextRequest) {
   }
 
   // Redirect to dashboard if trying to access auth routes while logged in
-  if (isPublicRoute && refreshToken && (pathname.startsWith('/login') || pathname.startsWith('/register'))) {
+  if (
+    isPublicRoute &&
+    refreshToken &&
+    (pathname.startsWith('/login') || pathname.startsWith('/register'))
+  ) {
     return NextResponse.redirect(new URL('/dashboard', request.url));
   }
 

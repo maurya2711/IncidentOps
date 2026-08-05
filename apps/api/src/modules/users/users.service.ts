@@ -1,7 +1,9 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import { Model } from 'mongoose';
+
 import { UserPublic } from '@incidentops/shared';
+
 import { User, UserDocument } from './schemas/user.schema';
 
 @Injectable()
@@ -42,6 +44,16 @@ export class UsersService {
       .exec();
   }
 
+  async findByInviteToken(token: string): Promise<UserDocument | null> {
+    return this.userModel
+      .findOne({
+        inviteToken: token,
+        inviteTokenExpires: { $gt: new Date() },
+      })
+      .select('+inviteToken +password')
+      .exec();
+  }
+
   async findByResetToken(token: string): Promise<UserDocument | null> {
     return this.userModel
       .findOne({
@@ -53,9 +65,7 @@ export class UsersService {
   }
 
   async update(id: string, data: Partial<User>): Promise<UserDocument> {
-    const user = await this.userModel
-      .findByIdAndUpdate(id, { $set: data }, { new: true })
-      .exec();
+    const user = await this.userModel.findByIdAndUpdate(id, { $set: data }, { new: true }).exec();
 
     if (!user) {
       throw new NotFoundException('User not found');
@@ -71,10 +81,13 @@ export class UsersService {
       email: user.email,
       avatar: user.avatar,
       role: user.role,
+      isVerified: user.isVerified,
     };
   }
 
-  async getProfile(userId: string): Promise<UserPublic & { timezone: string; bio?: string; isVerified: boolean }> {
+  async getProfile(
+    userId: string,
+  ): Promise<UserPublic & { timezone: string; bio?: string; isVerified: boolean }> {
     const user = await this.findById(userId);
     if (!user) {
       throw new NotFoundException('User not found');

@@ -8,10 +8,12 @@ import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
+
 import { BCRYPT_ROUNDS, TIME } from '@incidentops/shared';
+
 import { MailService } from '../../shared/mail/mail.service';
-import { UsersService } from '../users/users.service';
 import { UserDocument } from '../users/schemas/user.schema';
+import { UsersService } from '../users/users.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
@@ -26,6 +28,10 @@ export class AuthService {
     private readonly mailService: MailService,
   ) {}
 
+  /**
+   * Self-registration is DISABLED. Accounts are created exclusively by
+   * SUPER_ADMIN/ADMIN via the Admin module. This method is kept for seeding only.
+   */
   async register(dto: RegisterDto): Promise<{ message: string }> {
     const existing = await this.usersService.findByEmail(dto.email);
     if (existing) {
@@ -48,6 +54,29 @@ export class AuthService {
     return { message: 'Registration successful. Please check your email to verify your account.' };
   }
 
+  async acceptInvite(dto: { token: string; password: string }): Promise<{ message: string }> {
+    const user = await this.usersService.findByInviteToken(dto.token);
+
+    if (!user) {
+      throw new BadRequestException(
+        'Invalid or expired invitation link. Please ask your admin to resend the invite.',
+      );
+    }
+
+    if (dto.password.length < 8) {
+      throw new BadRequestException('Password must be at least 8 characters');
+    }
+
+    user.password = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
+    user.isVerified = true;
+    user.isInvitePending = false;
+    user.inviteToken = undefined;
+    user.inviteTokenExpires = undefined;
+    await user.save();
+
+    return { message: 'Account activated successfully. You can now log in.' };
+  }
+
   async login(
     dto: LoginDto,
     meta: { ipAddress?: string; userAgent?: string },
@@ -61,6 +90,10 @@ export class AuthService {
     const isPasswordValid = await bcrypt.compare(dto.password, user.password);
     if (!isPasswordValid) {
       throw new UnauthorizedException('Invalid email or password');
+    }
+
+    if (!user.isVerified) {
+      throw new UnauthorizedException('Please verify your email before logging in');
     }
 
     const refreshExpiry = dto.rememberMe
@@ -160,6 +193,46 @@ export class AuthService {
 
   async getMe(userId: string) {
     return this.usersService.getProfile(userId);
+  }
+
+  async verifyEmail(token: string): Promise<{ message: string }> {
+    const user = await this.usersService.findByVerificationToken(token);
+
+    if (!user) {
+      throw new BadRequestException('Invalid or expired verification token');
+    }
+
+    if (user.isVerified) {
+      throw new BadRequestException('Email already verified');
+    }
+
+    user.isVerified = true;
+    user.emailVerificationToken = undefined;
+    user.emailVerificationExpires = undefined;
+    await user.save();
+
+    return { message: 'Email verified successfully. You can now log in.' };
+  }
+
+  async resendVerification(email: string): Promise<{ message: string }> {
+    const user = await this.usersService.findByEmail(email);
+
+    if (!user) {
+      throw new BadRequestException('No account found with this email');
+    }
+
+    if (user.isVerified) {
+      throw new BadRequestException('Email already verified');
+    }
+
+    const verificationToken = crypto.randomBytes(32).toString('hex');
+    user.emailVerificationToken = verificationToken;
+    user.emailVerificationExpires = new Date(Date.now() + TIME.EMAIL_VERIFICATION_TTL_MS);
+    await user.save();
+
+    await this.mailService.sendVerificationEmail(user.email, user.name, verificationToken);
+
+    return { message: 'Verification email sent. Please check your inbox.' };
   }
 
   private async generateTokens(

@@ -2,6 +2,8 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+
+import { GlobalExceptionFilter, JwtAuthGuard, TransformInterceptor } from './common';
 import {
   appConfig,
   databaseConfig,
@@ -10,21 +12,21 @@ import {
   smtpConfig,
   validationSchema,
 } from './config';
-import { GlobalExceptionFilter, TransformInterceptor, JwtAuthGuard } from './common';
-import { DatabaseModule, RedisModule, QueueModule } from './shared';
-import { MailModule } from './shared/mail/mail.module';
+import { HealthController } from './health/health.controller';
 import {
-  AuthModule,
-  UsersModule,
-  IncidentsModule,
-  ServicesModule,
-  TeamsModule,
+  AdminModule,
   AnalyticsModule,
+  AuthModule,
+  IncidentsModule,
   NotificationsModule,
+  ServicesModule,
   SettingsModule,
   StatusPageModule,
+  TeamsModule,
+  UsersModule,
 } from './modules';
-import { HealthController } from './health/health.controller';
+import { DatabaseModule, QueueModule, RedisModule } from './shared';
+import { MailModule } from './shared/mail/mail.module';
 
 @Module({
   imports: [
@@ -53,6 +55,7 @@ import { HealthController } from './health/health.controller';
     NotificationsModule,
     SettingsModule,
     StatusPageModule,
+    AdminModule,
     MailModule,
   ],
   controllers: [HealthController],

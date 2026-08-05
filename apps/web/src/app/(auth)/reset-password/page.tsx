@@ -1,23 +1,25 @@
 'use client';
 
-import { useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useState } from 'react';
+import { useForm } from 'react-hook-form';
+
+import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation } from '@tanstack/react-query';
-import { authApi } from '@/lib/api/auth';
-import { resetPasswordSchema, type ResetPasswordFormData } from '@/lib/schemas/auth';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { PasswordStrength } from '@/components/password-strength';
-import { Loader2, AlertCircle, Lock, CheckCircle, ArrowLeft } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { AlertCircle, ArrowLeft, CheckCircle, Loader2, Lock } from 'lucide-react';
 import { toast } from 'sonner';
 
-export default function ResetPasswordPage() {
+import { PasswordStrength } from '@/components/password-strength';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { authApi } from '@/lib/api/auth';
+import { type ResetPasswordFormData, resetPasswordSchema } from '@/lib/schemas/auth';
+
+function ResetPasswordContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const token = searchParams.get('token');
@@ -87,10 +89,7 @@ export default function ResetPasswordPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Button
-              className="w-full"
-              onClick={() => router.push('/login')}
-            >
+            <Button className="w-full" onClick={() => router.push('/login')}>
               Go to sign in
             </Button>
           </CardContent>
@@ -148,9 +147,7 @@ export default function ResetPasswordPage() {
             <Lock className="h-6 w-6 text-primary" />
           </div>
           <CardTitle className="text-2xl font-bold">Reset your password</CardTitle>
-          <CardDescription>
-            Enter your new password below
-          </CardDescription>
+          <CardDescription>Enter your new password below</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -174,7 +171,7 @@ export default function ResetPasswordPage() {
                   {errors.password.message}
                 </motion.div>
               )}
-              
+
               {password && (
                 <div className="space-y-1 mt-2">
                   {requirements.map((req, index) => (
@@ -184,7 +181,9 @@ export default function ResetPasswordPage() {
                       ) : (
                         <div className="h-3 w-3 rounded-full border border-muted-foreground" />
                       )}
-                      <span className={req.test(password) ? 'text-green-500' : 'text-muted-foreground'}>
+                      <span
+                        className={req.test(password) ? 'text-green-500' : 'text-muted-foreground'}
+                      >
                         {req.label}
                       </span>
                     </div>
@@ -214,11 +213,7 @@ export default function ResetPasswordPage() {
               )}
             </div>
 
-            <Button
-              type="submit"
-              className="w-full"
-              disabled={resetPasswordMutation.isPending}
-            >
+            <Button type="submit" className="w-full" disabled={resetPasswordMutation.isPending}>
               {resetPasswordMutation.isPending ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -231,7 +226,10 @@ export default function ResetPasswordPage() {
           </form>
 
           <div className="mt-6 text-center text-sm">
-            <Link href="/login" className="text-muted-foreground hover:text-foreground inline-flex items-center">
+            <Link
+              href="/login"
+              className="text-muted-foreground hover:text-foreground inline-flex items-center"
+            >
               <ArrowLeft className="mr-2 h-4 w-4" />
               Back to sign in
             </Link>
@@ -239,5 +237,19 @@ export default function ResetPasswordPage() {
         </CardContent>
       </Card>
     </motion.div>
+  );
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex items-center justify-center p-8">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      }
+    >
+      <ResetPasswordContent />
+    </Suspense>
   );
 }

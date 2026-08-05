@@ -1,4 +1,5 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from 'axios';
+
 import { API_URL } from './constants';
 
 let accessToken: string | null = null;
@@ -22,6 +23,10 @@ function onTokenRefreshed(token: string) {
   refreshSubscribers = [];
 }
 
+function onRefreshFailed() {
+  refreshSubscribers = [];
+}
+
 export const api = axios.create({
   baseURL: `${API_URL}/api`,
   withCredentials: true,
@@ -40,14 +45,26 @@ api.interceptors.response.use(
   async (error: AxiosError) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    // Skip refresh logic for the refresh and logout endpoints themselves
+    const isRefreshUrl = originalRequest.url?.includes('/auth/refresh');
+    const isLogoutUrl = originalRequest.url?.includes('/auth/logout');
+
+    if (
+      error.response?.status === 401 &&
+      !originalRequest._retry &&
+      !isRefreshUrl &&
+      !isLogoutUrl
+    ) {
       if (isRefreshing) {
-        return new Promise((resolve) => {
+        // Queue requests while refresh is in-flight
+        return new Promise((resolve, reject) => {
           subscribeTokenRefresh((token) => {
-            if (originalRequest.headers) {
+            if (token && originalRequest.headers) {
               originalRequest.headers.Authorization = `Bearer ${token}`;
+              resolve(api(originalRequest));
+            } else {
+              reject(error);
             }
-            resolve(api(originalRequest));
           });
         });
       }
@@ -61,30 +78,42 @@ api.interceptors.response.use(
           {},
           { withCredentials: true },
         );
-        const newToken = data.data.accessToken as string;
+
+        // The TransformInterceptor wraps as: { data: { accessToken } }
+        // Handle both possible response shapes defensively
+        const body = data?.data;
+        const newToken = (body?.accessToken ?? body?.data?.accessToken) as string | undefined;
+
+        if (!newToken) {
+          throw new Error('No access token in refresh response');
+        }
+
         setAccessToken(newToken);
         onTokenRefreshed(newToken);
+
         if (originalRequest.headers) {
           originalRequest.headers.Authorization = `Bearer ${newToken}`;
         }
         return api(originalRequest);
-      } catch {
+      } catch (refreshError) {
         setAccessToken(null);
+        onRefreshFailed();
+        // Clear the httpOnly cookie on the backend
+        await axios
+          .post(`${API_URL}/api/auth/logout`, {}, { withCredentials: true })
+          .catch(() => {});
+        // Use Next.js router-style soft redirect so React can unmount cleanly
         if (typeof window !== 'undefined') {
           window.location.href = '/login';
         }
-        return Promise.reject(error);
+        return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;
-      }
-    }
-
-    if (error.response?.status === 403) {
-      if (typeof window !== 'undefined') {
-        window.location.href = '/dashboard';
       }
     }
 
     return Promise.reject(error);
   },
 );
+
+export default api;

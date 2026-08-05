@@ -9,18 +9,20 @@ import {
   Res,
   UseGuards,
 } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { Request, Response } from 'express';
-import { AuthGuard } from '@nestjs/passport';
+
+import { RATE_LIMIT } from '@incidentops/shared';
+
 import { Public } from '../../common/decorators';
 import { GetUser } from '../../common/decorators/get-user.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
-import { RATE_LIMIT } from '@incidentops/shared';
 import { AuthService } from './auth.service';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto } from './dto/register.dto';
-import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { JwtPayload } from './interfaces/jwt-payload.interface';
 
@@ -31,12 +33,42 @@ const REFRESH_COOKIE = 'refreshToken';
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
-  @Public()
   @Post('register')
+  @UseGuards(JwtAuthGuard)
   @Throttle({ default: { ttl: RATE_LIMIT.AUTH_WINDOW_MS, limit: RATE_LIMIT.AUTH_MAX_REQUESTS } })
-  @ApiOperation({ summary: 'Register a new account' })
+  @ApiOperation({ summary: 'Register — SUPER_ADMIN seeding only (use /admin/users for invites)' })
   register(@Body() dto: RegisterDto) {
     return this.authService.register(dto);
+  }
+
+  @Public()
+  @Post('accept-invite')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { ttl: RATE_LIMIT.AUTH_WINDOW_MS, limit: RATE_LIMIT.AUTH_MAX_REQUESTS } })
+  @ApiOperation({ summary: 'Accept invitation and set password' })
+  async acceptInvite(@Body() dto: { token: string; password: string }) {
+    const result = await this.authService.acceptInvite(dto);
+    return { data: result };
+  }
+
+  @Public()
+  @Post('verify-email')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { ttl: RATE_LIMIT.AUTH_WINDOW_MS, limit: RATE_LIMIT.AUTH_MAX_REQUESTS } })
+  @ApiOperation({ summary: 'Verify email with token' })
+  async verifyEmail(@Body() dto: { token: string }) {
+    const result = await this.authService.verifyEmail(dto.token);
+    return { data: result };
+  }
+
+  @Public()
+  @Post('resend-verification')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { ttl: RATE_LIMIT.AUTH_WINDOW_MS, limit: RATE_LIMIT.AUTH_MAX_REQUESTS } })
+  @ApiOperation({ summary: 'Resend verification email' })
+  async resendVerification(@Body() dto: { email: string }) {
+    const result = await this.authService.resendVerification(dto.email);
+    return { data: result };
   }
 
   @Public()
@@ -44,7 +76,11 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @Throttle({ default: { ttl: RATE_LIMIT.AUTH_WINDOW_MS, limit: RATE_LIMIT.AUTH_MAX_REQUESTS } })
   @ApiOperation({ summary: 'Login with email and password' })
-  async login(@Body() dto: LoginDto, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
+  async login(
+    @Body() dto: LoginDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     const result = await this.authService.login(dto, {
       ipAddress: req.ip,
       userAgent: req.headers['user-agent'],
@@ -73,15 +109,14 @@ export class AuthController {
     return { accessToken: result.accessToken };
   }
 
+  @Public()
   @Post('logout')
   @HttpCode(HttpStatus.OK)
-  @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: 'Logout current session' })
-  async logout(
-    @GetUser() user: JwtPayload,
-    @Res({ passthrough: true }) res: Response,
-  ) {
-    await this.authService.logout(user.sub, user.sessionId);
+  async logout(@GetUser() user: JwtPayload | undefined, @Res({ passthrough: true }) res: Response) {
+    if (user && user.sub) {
+      await this.authService.logout(user.sub, user.sessionId);
+    }
     this.clearRefreshCookie(res);
     return { message: 'Logged out successfully' };
   }

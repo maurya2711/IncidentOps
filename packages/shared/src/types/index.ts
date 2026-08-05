@@ -37,6 +37,7 @@ export interface UserPublic {
   email: string;
   avatar?: string;
   role: UserRole;
+  isVerified?: boolean;
 }
 
 // ─── Team ─────────────────────────────────────────────────────────────────────

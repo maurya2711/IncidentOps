@@ -1,21 +1,23 @@
 'use client';
 
-import { useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useState } from 'react';
+import { useForm } from 'react-hook-form';
+
+import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation } from '@tanstack/react-query';
-import { authApi } from '@/lib/api/auth';
-import { registerSchema, type RegisterFormData } from '@/lib/schemas/auth';
+import { motion } from 'framer-motion';
+import { AlertCircle, Check, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
+
+import { PasswordStrength } from '@/components/password-strength';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { PasswordStrength } from '@/components/password-strength';
-import { Loader2, AlertCircle, Check } from 'lucide-react';
-import { toast } from 'sonner';
+import { authApi } from '@/lib/api/auth';
+import { type RegisterFormData, registerSchema } from '@/lib/schemas/auth';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -40,9 +42,12 @@ export default function RegisterPage() {
 
   const registerMutation = useMutation({
     mutationFn: authApi.register,
-    onSuccess: (data) => {
-      toast.success(data.data.message || 'Account created! Please check your email to verify.');
-      router.push('/login');
+    onSuccess: (data, variables) => {
+      toast.success(
+        (data.data as any)?.message || 'Account created! Please check your email to verify.',
+      );
+      // Redirect to resend verification page with email pre-filled
+      router.push(`/resend-verification?email=${encodeURIComponent(variables.email)}`);
     },
     onError: (error: any) => {
       toast.error(error.response?.data?.message || 'Registration failed');
@@ -79,9 +84,7 @@ export default function RegisterPage() {
       <Card>
         <CardHeader className="space-y-1">
           <CardTitle className="text-2xl font-bold">Create an account</CardTitle>
-          <CardDescription>
-            Enter your information to get started
-          </CardDescription>
+          <CardDescription>Enter your information to get started</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
@@ -147,7 +150,7 @@ export default function RegisterPage() {
                   {errors.password.message}
                 </motion.div>
               )}
-              
+
               {password && (
                 <div className="space-y-1 mt-2">
                   {requirements.map((req, index) => (
@@ -157,7 +160,9 @@ export default function RegisterPage() {
                       ) : (
                         <div className="h-3 w-3 rounded-full border border-muted-foreground" />
                       )}
-                      <span className={req.test(password) ? 'text-green-500' : 'text-muted-foreground'}>
+                      <span
+                        className={req.test(password) ? 'text-green-500' : 'text-muted-foreground'}
+                      >
                         {req.label}
                       </span>
                     </div>

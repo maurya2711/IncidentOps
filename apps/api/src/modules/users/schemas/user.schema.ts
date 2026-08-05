@@ -1,5 +1,6 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document } from 'mongoose';
+
 import { UserRole } from '@incidentops/shared';
 
 export type UserDocument = User & Document;
@@ -35,7 +36,7 @@ export class User {
   @Prop({ required: true, trim: true })
   name!: string;
 
-  @Prop({ required: true, unique: true, lowercase: true, trim: true })
+  @Prop({ required: true, lowercase: true, trim: true })
   email!: string;
 
   @Prop({ required: true, select: false })
@@ -74,12 +75,26 @@ export class User {
   @Prop()
   passwordResetExpires?: Date;
 
+  // --- Invite flow ---
+  @Prop({ select: false })
+  inviteToken?: string;
+
+  @Prop()
+  inviteTokenExpires?: Date;
+
+  @Prop({ default: false })
+  isInvitePending!: boolean;
+
+  @Prop({ type: String })
+  invitedBy?: string; // userId of creator
+
   @Prop({ type: [UserSessionSchema], default: [] })
   sessions!: UserSession[];
 }
 
 export const UserSchema = SchemaFactory.createForClass(User);
 
-UserSchema.index({ email: 1 });
+UserSchema.index({ email: 1 }, { unique: true });
 UserSchema.index({ emailVerificationToken: 1 });
 UserSchema.index({ passwordResetToken: 1 });
+UserSchema.index({ inviteToken: 1 });

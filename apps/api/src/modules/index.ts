@@ -7,3 +7,4 @@ export * from './analytics/analytics.module';
 export * from './notifications/notifications.module';
 export * from './settings/settings.module';
 export * from './status-page/status-page.module';
+export * from './admin/admin.module';

@@ -1,5 +1,6 @@
-import { api } from '../api';
 import type { UserPublic } from '@incidentops/shared';
+
+import { api } from '../api';
 
 export interface LoginResponse {
   auth: {
@@ -11,6 +12,14 @@ export interface LoginResponse {
 }
 
 export interface RegisterResponse {
+  message: string;
+}
+
+export interface VerifyEmailResponse {
+  message: string;
+}
+
+export interface ResendVerificationResponse {
   message: string;
 }
 
@@ -34,6 +43,12 @@ export const authApi = {
 
   register: (data: { name: string; email: string; password: string }) =>
     api.post<{ data: RegisterResponse }>('/auth/register', data),
+
+  verifyEmail: (token: string) =>
+    api.post<{ data: VerifyEmailResponse }>('/auth/verify-email', { token }),
+
+  resendVerification: (email: string) =>
+    api.post<{ data: ResendVerificationResponse }>('/auth/resend-verification', { email }),
 
   logout: () => api.post<{ data: { message: string } }>('/auth/logout'),
 
