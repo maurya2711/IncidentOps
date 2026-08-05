@@ -2,7 +2,7 @@
   "name": "@incidentops/api",
   "version": "1.0.0",
   "private": true,
-  "description": "IncidentOps NestJS API",
+  "description": "IncidentOps NestJS API Service",
   "scripts": {
     "prebuild": "pnpm --filter @incidentops/shared build",
     "build": "nest build",
