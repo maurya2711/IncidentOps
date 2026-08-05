@@ -134,15 +134,16 @@ export class AdminService {
 
     await user.save();
 
-    await this.mailService.sendInvitationEmail(
-      dto.email,
-      dto.name,
-      inviteToken,
-      actorName,
-      dto.role,
-    );
+    // Fire-and-forget invitation email so HTTP response returns instantly without waiting for SMTP
+    this.mailService
+      .sendInvitationEmail(dto.email, dto.name, inviteToken, actorName, dto.role)
+      .catch(() => {});
 
-    return { message: `Invitation sent to ${dto.email}`, user: this.toSafe(user) };
+    return {
+      message: `Invitation sent to ${dto.email}`,
+      user: this.toSafe(user),
+      inviteToken,
+    };
   }
 
   // ─── Resend Invite ───────────────────────────────────────────────────────
@@ -165,15 +166,11 @@ export class AdminService {
     user.isInvitePending = true;
     await user.save();
 
-    await this.mailService.sendInvitationEmail(
-      user.email,
-      user.name,
-      inviteToken,
-      'Admin',
-      user.role,
-    );
+    this.mailService
+      .sendInvitationEmail(user.email, user.name, inviteToken, 'Admin', user.role)
+      .catch(() => {});
 
-    return { message: `Invitation resent to ${user.email}` };
+    return { message: `Invitation resent to ${user.email}`, inviteToken };
   }
 
   // ─── Update (role / active) ───────────────────────────────────────────────

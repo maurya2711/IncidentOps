@@ -12,13 +12,18 @@ export class MailService {
     const user = this.configService.get<string>('smtp.user');
 
     if (host && user) {
+      const port = this.configService.get<number>('smtp.port') ?? 587;
       this.transporter = nodemailer.createTransport({
         host,
-        port: this.configService.get<number>('smtp.port'),
+        port,
+        secure: port === 465,
         auth: {
           user,
           pass: this.configService.get<string>('smtp.pass'),
         },
+        connectionTimeout: 5000,
+        greetingTimeout: 5000,
+        socketTimeout: 5000,
       });
     }
   }
@@ -37,7 +42,12 @@ export class MailService {
       return;
     }
 
-    await this.transporter.sendMail({ from, ...options });
+    try {
+      await this.transporter.sendMail({ from, ...options });
+      this.logger.log(`Email successfully sent to ${options.to}`);
+    } catch (err: any) {
+      this.logger.error(`Failed to send email to ${options.to}: ${err.message}`);
+    }
   }
 
   async sendVerificationEmail(email: string, name: string, token: string): Promise<void> {
